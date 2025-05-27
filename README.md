@@ -51,3 +51,31 @@ Expected output:
 Ubuntu terminal (e.g., root@cent-stage-server:~#).
 ```
 
+run
+```
+apt update && apt upgrade -y
+```
+```
+exit
+```
+
+
+**Set Up Firewall (Optional but Recommended):**
+In Hetzner Cloud Console, go to Firewalls > Create Firewall.
+
+Name: cent-stage-firewall.
+
+Add rules:
+-->SSH: Protocol: TCP, Port: 22, Source: 0.0.0.0/0.
+-->HTTP: Protocol: TCP, Port: 80, Source: 0.0.0.0/0.
+-->HTTPS: Protocol: TCP, Port: 443, Source: 0.0.0.0/0.
+***apply rules for both inbound and outbound***
+
+Apply to your server: Select ubuntu-4gb-hel1-2.
+
+Click Create.
+
+This allows SSH and web traffic while blocking other ports.
+
+
+
