@@ -1,6 +1,6 @@
 # Docker-Docs
 
-**Generate SSH Key on Windows**
+**Generate SSH Key on Windows:**
 
 Open PowerShell:
 
@@ -43,6 +43,8 @@ In PowerShell, connect to the server:
 ```
 ssh root@135.181.192.55
 ```
+
+
 If prompted, type yes to accept the host key.
 Expected output: 
 ```
