@@ -223,24 +223,24 @@ This guide walks you through setting up SSH access, configuring a firewall, and 
 
 ---
 
-##  Порты брандмауэра для служб (Open Firewall Ports for Services)
+## (Open Firewall Ports for Services)
 
-This section seems to be a placeholder. If you plan to run specific services (e.g., a web server on port 8080, a database on port 5432), you will need to:
+Your microservices will use specific ports (e.g., 3002 for auth-service, 3004 for post-service, 3005 for subscription-service, 5432 for PostgreSQL, 6379 for Redis, 80/443 for Nginx
 
-1.  **Update your Hetzner Firewall rules** to allow inbound traffic on those specific ports.
-2.  Ensure your `docker-compose.yml` or `docker run` commands map the container ports to the host ports you've opened in the firewall.
+1.  **Update the Hetzner firewall (set up in Step 1):** In Hetzner Cloud Console, go to Firewalls > cent-stage-firewall.
+2.  Add rules:
+   *    PostgreSQL: Protocol: TCP, Port: 5432, Source: 0.0.0.0/0 (restrict to server IP later for security).
+   *    Redis: Protocol: TCP, Port: 6379, Source: 0.0.0.0/0 (restrict later).
+   *    Custom Ports: Protocol: TCP, Port: 3000,30001,3002,3004,3005, Source: 0.0.0.0/0.
+3.    Apply to cent-stage-server.
 
-For example, if you run a service that listens on port `3000` inside the container and you want to expose it on port `80` of your host:
-*   Ensure port `80` (TCP, Inbound) is open in your Hetzner Firewall.
-*   Use port mapping in Docker: `docker run -p 80:3000 your_image_name` or in `docker-compose.yml`:
-    ```yaml
-    services:
-      myservice:
-        image: your_image_name
-        ports:
-          - "80:3000"
-    ```
+## 8.Create Deployment Directory:
+Create a directory for your application on the server:
+```
+mkdir -p /root/cent-stage
+cd /root/cent-stage
+```
+This will store Dockerfiles, Docker Compose, and configuration files.
 
----
 
-This improved layout uses headings, code blocks with language hints, lists, blockquotes for outputs, and bolding for emphasis, making it much easier to follow. The firewall rules are now in a table for clarity. I also added a dynamic way to get the latest Docker Compose version.
+##create docker containers##
