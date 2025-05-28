@@ -138,3 +138,37 @@ Verify installation:
 docker-compose --version
 ```
 
+**Allow Non-Root Docker Usage (Optional but Recommended):**
+
+Add the root user to the docker group to run Docker without sudo:
+```
+sudo usermod -aG docker $USER
+```
+Log out and reconnect via SSH to apply:
+```
+exit
+ssh root@135.181.192.55
+```
+Test Docker without sudo:
+```
+docker ps
+```
+
+
+**Test Docker with a Sample Container:**
+
+Run a test container to verify Docker:
+```
+docker run --rm hello-world
+```
+Expected output: Message starting with Hello from Docker!.
+
+This confirms Docker is working.
+
+Remove unused images:
+```
+docker image rm hello-world
+```
+
+
+**Open Firewall Ports for Services:**
