@@ -83,4 +83,58 @@ Click Create.
 This allows SSH and web traffic while blocking other ports.
 
 
+**Install Docker and Docker Compose on Hetzner Server**
+```
+ssh root@135.181.192.55
+```
+
+Install Docker:
+```
+sudo apt update
+```
+install prerequisites:
+```
+sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
+```
+Add Docker’s GPG key:
+```
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+```
+Add Docker repository:
+```
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+```
+Update package index again:
+```
+sudo apt update
+```
+Install Docker:
+```
+sudo apt install -y docker-ce docker-ce-cli containerd.io
+```
+Verify Docker installation:
+```
+sudo docker --version
+```
+Start and enable Docker service:
+```
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+Check Docker status:
+```
+sudo systemctl status docker
+```
+Install Docker Compose:
+```
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.36.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+```
+Make it executable:
+```
+sudo chmod +x /usr/local/bin/docker-compose
+```
+Verify installation:
+```
+docker-compose --version
+```
 
