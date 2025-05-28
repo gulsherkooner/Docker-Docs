@@ -1,174 +1,246 @@
-# Docker-Docs
+# Docker-Docs: Setting Up a Docker Environment on Hetzner
 
-**Generate SSH Key on Windows:**
+This guide walks you through setting up SSH access, configuring a firewall, and installing Docker and Docker Compose on an Ubuntu server hosted with Hetzner Cloud.
 
-Open PowerShell:
+---
 
-run: 
-``` bash 
-ssh-keygen -t ed25519 -C "ubuntu-4gb-hel1-2"
-```
+## 🔑 1. Generate SSH Key on Windows
 
-Press Enter for default file location
+1.  **Open PowerShell.**
 
-Press Enter twice to skip passphrase (or set one for extra security).
+2.  **Run the key generation command:**
+    ```powershell
+    ssh-keygen -t ed25519 -C "ubuntu-4gb-hel1-2"
+    ```
+    *   Press **Enter** to accept the default file location (e.g., `C:\Users\your_username\.ssh\id_ed25519`).
+    *   Press **Enter** twice to skip setting a passphrase (or enter a passphrase for extra security).
 
-Output: 
-```bash
-Your public key has been saved in C:\Users\uset\.ssh\id_ed25519.pub
-```
+3.  **Output Confirmation:**
+    You should see a confirmation message similar to:
+    ```
+    Your public key has been saved in C:\Users\uset\.ssh\id_ed25519.pub
+    ```
 
-View the public key: 
-```bash
-Get-Content C:\Users\uset\.ssh\id_ed25519.pub
-```
+4.  **View and Copy Your Public Key:**
+    ```powershell
+    Get-Content C:\Users\uset\.ssh\id_ed25519.pub
+    ```
+    Copy the entire output. It will look something like:
+    `ssh-ed25519 AAAAC3Nza... ubuntu-4gb-hel1-2`
 
-Copy the output (e.g., ssh-ed25519 AAAAC3Nza... ubuntu-4gb-hel1-2).
+---
 
-**Add SSH Key to Hetzner:**
+## ☁️ 2. Add SSH Key to Hetzner Cloud
 
-In Hetzner Cloud Console, go to your project > Security > SSH Keys.
+1.  Navigate to the Hetzner Cloud Console.
+2.  Go to your **Project > Security > SSH Keys**.
+3.  Click **Add SSH Key**.
+4.  **Paste** the public key you copied in the previous section.
+5.  **Name** the key (e.g., `ubuntu-4gb-hel1-2`).
+6.  Click **Add SSH Key**.
 
-Click Add SSH Key.
+---
 
-Paste the public key from step 3.
+## 🧪 3. Test SSH Access from Windows
 
-Name it (e.g., ubuntu-4gb-hel1-2).
+1.  **Connect to your server via PowerShell:**
+    Replace `135.181.192.55` with your server's actual IP address.
+    ```powershell
+    ssh root@135.181.192.55
+    ```
 
-Click Add.
+2.  If prompted to trust the host key, type `yes` and press **Enter**.
 
-**Test SSH Access from Windows:**
+3.  **Expected Output:** You should be logged into your Ubuntu server terminal:
+    ```
+    root@your-server-name:~#
+    ```
+    (For example: `root@cent-stage-server:~#`)
 
-In PowerShell, connect to the server:
-```
-ssh root@135.181.192.55
-```
+4.  **Update and upgrade your server:**
+    ```bash
+    apt update && apt upgrade -y
+    ```
 
+5.  **Exit the SSH session:**
+    ```bash
+    exit
+    ```
 
-If prompted, type yes to accept the host key.
-Expected output: 
-```
-Ubuntu terminal (e.g., root@cent-stage-server:~#).
-```
+---
 
-run
-```
-apt update && apt upgrade -y
-```
-```
-exit
-```
+## 🔥 4. Set Up Firewall (Optional but Recommended)
 
+1.  In the Hetzner Cloud Console, go to **Your Project > Security > Firewalls**.
+2.  Click **Create Firewall**.
+3.  **Name:** `cent-stage-firewall` (or your preferred name).
+4.  **Add Rules:**
+    Create the following rules. Ensure you apply them for **both inbound and outbound traffic** as per your requirement.
 
-**Set Up Firewall (Optional but Recommended):**
+    | Service | Direction | Protocol | Port | Source IPs  |
+    | :------ | :-------- | :------- | :--- | :---------- |
+    | SSH     | Inbound   | TCP      | 22   | `0.0.0.0/0` |
+    | HTTP    | Inbound   | TCP      | 80   | `0.0.0.0/0` |
+    | HTTPS   | Inbound   | TCP      | 443  | `0.0.0.0/0` |
+    | SSH     | Outbound  | TCP      | 22   | `0.0.0.0/0` |
+    | HTTP    | Outbound  | TCP      | 80   | `0.0.0.0/0` |
+    | HTTPS   | Outbound  | TCP      | 443  | `0.0.0.0/0` |
 
-In Hetzner Cloud Console, go to Firewalls > Create Firewall.
+    > **Note:** Applying rules for *outbound* traffic with specific ports like this is less common. Typically, outbound traffic is allowed more broadly by default. Ensure this matches your security policy. If you only want to restrict *inbound*, only create inbound rules.
 
-Name: cent-stage-firewall.
+5.  **Apply to Server(s):**
+    Under "Applied to", select your server (e.g., `ubuntu-4gb-hel1-2`).
+6.  Click **Create Firewall**.
 
-Add rules:
+    This configuration allows SSH and standard web traffic while blocking other ports.
 
--->SSH: Protocol: TCP, Port: 22, Source: 0.0.0.0/0.
+---
 
--->HTTP: Protocol: TCP, Port: 80, Source: 0.0.0.0/0.
+## 🐳 5. Install Docker and Docker Compose on Hetzner Server
 
--->HTTPS: Protocol: TCP, Port: 443, Source: 0.0.0.0/0.
+1.  **Connect to your server again:**
+    ```powershell
+    ssh root@135.181.192.55
+    ```
 
-***apply rules for both inbound and outbound***
+2.  **Update package list:**
+    ```bash
+    sudo apt update
+    ```
 
-Apply to your server: Select ubuntu-4gb-hel1-2.
+3.  **Install prerequisites:**
+    ```bash
+    sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
+    ```
 
-Click Create.
+4.  **Add Docker’s official GPG key:**
+    ```bash
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    ```
 
-This allows SSH and web traffic while blocking other ports.
+5.  **Set up the Docker repository:**
+    ```bash
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    ```
 
+6.  **Update package index again (with Docker repo):**
+    ```bash
+    sudo apt update
+    ```
 
-**Install Docker and Docker Compose on Hetzner Server**
-```
-ssh root@135.181.192.55
-```
+7.  **Install Docker Engine, CLI, and Containerd:**
+    ```bash
+    sudo apt install -y docker-ce docker-ce-cli containerd.io
+    ```
 
-Install Docker:
-```
-sudo apt update
-```
-install prerequisites:
-```
-sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
-```
-Add Docker’s GPG key:
-```
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-```
-Add Docker repository:
-```
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-```
-Update package index again:
-```
-sudo apt update
-```
-Install Docker:
-```
-sudo apt install -y docker-ce docker-ce-cli containerd.io
-```
-Verify Docker installation:
-```
-sudo docker --version
-```
-Start and enable Docker service:
-```
-sudo systemctl start docker
-sudo systemctl enable docker
-```
-Check Docker status:
-```
-sudo systemctl status docker
-```
-Install Docker Compose:
-```
-sudo curl -L "https://github.com/docker/compose/releases/download/v2.36.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-```
-Make it executable:
-```
-sudo chmod +x /usr/local/bin/docker-compose
-```
-Verify installation:
-```
-docker-compose --version
-```
+8.  **Verify Docker installation:**
+    ```bash
+    sudo docker --version
+    ```
+    You should see the installed Docker version.
 
-**Allow Non-Root Docker Usage (Optional but Recommended):**
+9.  **Start and enable Docker service:**
+    ```bash
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    ```
 
-Add the root user to the docker group to run Docker without sudo:
-```
-sudo usermod -aG docker $USER
-```
-Log out and reconnect via SSH to apply:
-```
-exit
-ssh root@135.181.192.55
-```
-Test Docker without sudo:
-```
-docker ps
-```
+10. **Check Docker service status:**
+    ```bash
+    sudo systemctl status docker
+    ```
+    Look for `active (running)`. Press `q` to exit the status view.
 
+11. **Install Docker Compose:**
+    (Check [Docker Compose releases page](https://github.com/docker/compose/releases) for the latest version and update `v2.26.1` if necessary.)
+    ```bash
+    DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/') # Dynamically gets latest
+    sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    ```
 
-**Test Docker with a Sample Container:**
+12. **Make Docker Compose executable:**
+    ```bash
+    sudo chmod +x /usr/local/bin/docker-compose
+    ```
 
-Run a test container to verify Docker:
-```
-docker run --rm hello-world
-```
-Expected output: Message starting with Hello from Docker!.
+13. **Verify Docker Compose installation:**
+    ```bash
+    docker-compose --version
+    ```
+    You should see the installed Docker Compose version.
 
-This confirms Docker is working.
+---
 
-Remove unused images:
-```
-docker image rm hello-world
-```
+## 👤 6. Allow Non-Root Docker Usage (Optional but Recommended)
 
+1.  **Add your user to the `docker` group:**
+    Since you are logged in as `root`, `$USER` will be `root`. If you create a non-root user later, use that username instead of `$USER`.
+    ```bash
+    sudo usermod -aG docker $USER
+    ```
+    > **Security Note:** Adding `root` to the `docker` group doesn't change much as `root` already has privileges. This step is more impactful for non-root users. If you intend to run Docker as a non-root user, create that user first (e.g., `sudo adduser myuser`), then add `myuser` to the `docker` group (`sudo usermod -aG docker myuser`).
 
-**Open Firewall Ports for Services:**
+2.  **Apply group changes:**
+    Log out and log back into the server for the group changes to take effect.
+    ```bash
+    exit
+    ```
+    Then reconnect:
+    ```powershell
+    ssh root@135.181.192.55
+    ```
+    (If you added a non-root user, log in as that user.)
+
+3.  **Test Docker without `sudo`:**
+    ```bash
+    docker ps
+    ```
+    This command should now run without requiring `sudo`.
+
+---
+
+## ✅ 7. Test Docker with a Sample Container
+
+1.  **Run the `hello-world` container:**
+    ```bash
+    docker run --rm hello-world
+    ```
+
+2.  **Expected Output:**
+    You should see a message starting with:
+    ```
+    Hello from Docker!
+    This message shows that your installation appears to be working correctly.
+    ...
+    ```
+    This confirms Docker is installed and working correctly.
+
+3.  **Clean up (optional):**
+    The `--rm` flag automatically removed the container after it exited. You can remove the downloaded image if you wish:
+    ```bash
+    docker image rm hello-world
+    ```
+
+---
+
+##  Порты брандмауэра для служб (Open Firewall Ports for Services)
+
+This section seems to be a placeholder. If you plan to run specific services (e.g., a web server on port 8080, a database on port 5432), you will need to:
+
+1.  **Update your Hetzner Firewall rules** to allow inbound traffic on those specific ports.
+2.  Ensure your `docker-compose.yml` or `docker run` commands map the container ports to the host ports you've opened in the firewall.
+
+For example, if you run a service that listens on port `3000` inside the container and you want to expose it on port `80` of your host:
+*   Ensure port `80` (TCP, Inbound) is open in your Hetzner Firewall.
+*   Use port mapping in Docker: `docker run -p 80:3000 your_image_name` or in `docker-compose.yml`:
+    ```yaml
+    services:
+      myservice:
+        image: your_image_name
+        ports:
+          - "80:3000"
+    ```
+
+---
+
+This improved layout uses headings, code blocks with language hints, lists, blockquotes for outputs, and bolding for emphasis, making it much easier to follow. The firewall rules are now in a table for clarity. I also added a dynamic way to get the latest Docker Compose version.
