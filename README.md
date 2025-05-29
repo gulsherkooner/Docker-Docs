@@ -1,249 +1,478 @@
-# Docker-Docs: Setting Up a Docker Environment on Hetzner
+Docker Environment Setup on Hetzner Cloud
+This guide provides a step-by-step process to set up SSH access, configure a firewall, install Docker and Docker Compose, and deploy a microservices application on an Ubuntu 22.04 server hosted with Hetzner Cloud. The application includes auth-service, post-service, sub-service, next-frontend, api-gateway, and shared infrastructure (nginx, postgres, redis).
 
-This guide walks you through setting up SSH access, configuring a firewall, and installing Docker and Docker Compose on an Ubuntu server hosted with Hetzner Cloud.
+🔑 1. Generate SSH Key on Windows
+
+Open PowerShell on your Windows machine.
+
+Generate an SSH key pair:
+ssh-keygen -t ed25519 -C "ubuntu-4gb-hel1-2"
+
+
+Press Enter to accept the default file location (C:\Users\your_username\.ssh\id_ed25519).
+Press Enter twice to skip setting a passphrase (or set one for extra security).
+
+
+Verify the key:
+Get-Content C:\Users\uset\.ssh\id_ed25519.pub
+
+
+Copy the output (e.g., ssh-ed25519 AAAAC3Nza... ubuntu-4gb-hel1-2).
+
+
+
+
+☁️ 2. Add SSH Key to Hetzner Cloud
+
+Log in to the Hetzner Cloud Console.
+Navigate to Project > Security > SSH Keys.
+Click Add SSH Key.
+Paste the public key copied in Step 1.
+Name the key (e.g., ubuntu-4gb-hel1-2).
+Click Add SSH Key.
+
+
+🧪 3. Test SSH Access from Windows
+
+Connect to the server:Replace 135.181.192.55 with your server’s IP.
+ssh root@135.181.192.55
+
+
+Type yes to trust the host key if prompted.
+
+
+Expected Output:
+root@cent-stage-server:~#
+
+
+Update the server:
+apt update && apt upgrade -y
+
+
+Exit the SSH session:
+exit
+
+
+
+
+🔥 4. Configure Firewall
+
+In the Hetzner Cloud Console, go to Project > Security > Firewalls.
+Click Create Firewall.
+Set Name: cent-stage-firewall.
+Add Inbound Rules:
+
+
+Service
+Protocol
+Port
+Source IPs
+
+
+
+SSH
+TCP
+22
+0.0.0.0/0
+
+
+HTTP
+TCP
+80
+0.0.0.0/0
+
+
+HTTPS
+TCP
+443
+0.0.0.0/0
+
+
+Jenkins
+TCP
+8080
+0.0.0.0/0
+
+
+PostgreSQL
+TCP
+5432
+0.0.0.0/0*
+
+
+Redis
+TCP
+6379
+0.0.0.0/0*
+
+
+
+*Restrict PostgreSQL and Redis to your server’s IP or VPN for production.
+
+
+Apply to Server: Select your server (e.g., ubuntu-4gb-hel1-2).
+Click Create Firewall.
+On the server, enable ufw (optional):sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 8080/tcp
+sudo ufw enable
+
+
+
+
+🐳 5. Install Docker and Docker Compose
+
+Connect to the server:
+ssh root@135.181.192.55
+
+
+Update package list:
+sudo apt update
+
+
+Install prerequisites:
+sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
+
+
+Add Docker’s GPG key:
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+
+Set up Docker repository:
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+
+Update package index:
+sudo apt update
+
+
+Install Docker:
+sudo apt install -y docker-ce docker-ce-cli containerd.io
+
+
+Verify Docker:
+sudo docker --version
+
+
+Enable Docker service:
+sudo systemctl start docker
+sudo systemctl enable docker
+
+
+Install Docker Compose:
+DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+
+Verify Docker Compose:
+docker-compose --version
+
+
+
+
+👤 6. Enable Non-Root Docker Access (Optional)
+
+Add user to Docker group:
+sudo usermod -aG docker $USER
+
+
+Apply changes:
+exit
+ssh root@135.181.192.55
+
+
+Test Docker without sudo:
+docker ps
+
+
+
+
+✅ 7. Test Docker Installation
+
+Run a test container:
+docker run --rm hello-world
+
+
+Expected: Hello from Docker!
+
+
+Clean up:
+docker image rm hello-world
+
+
+
+
+📁 8. Set Up Deployment Directory
+
+Create directory:mkdir -p /root/centstage
+cd /root/centstage
+
+
+
+
+🛠️ 9. Create Docker Network
+
+Create a shared network:docker network create cent-stage-network
+
+
+
+
+🗄️ 10. Deploy Infrastructure Services
+
+Clone infrastructure repository:
+cd /root/centstage
+git clone https://github.com/gulsherkooner/infrastructure.git
+cd infrastructure
+
+
+Create docker-compose.yml:
+nano docker-compose.yml
+
+version: '3.8'
+services:
+  nginx:
+    image: nginx:latest
+    container_name: infrastructure-nginx-1
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    networks:
+      - cent-stage-network
+  postgres:
+    image: postgres:14
+    container_name: infrastructure-postgres-1
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: my_app
+    networks:
+      - cent-stage-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+  redis:
+    image: redis:7
+    container_name: infrastructure-redis-1
+    networks:
+      - cent-stage-network
+networks:
+  cent-stage-network:
+    external: true
+
+
+Create nginx.conf:
+nano nginx.conf
+
+http {
+    proxy_cache_path /tmp/nginx_cache levels=1:2 keys_zone=my_cache:10m max_size=10g inactive=60m use_temp_path=off;
+    server {
+        listen 80;
+        location /api/post {
+            proxy_pass http://api-gateway-api-gateway-1:2001/posts;
+            proxy_cache my_cache;
+            proxy_cache_valid 200 60s;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+        location /api/auth {
+            proxy_pass http://auth-service-auth-service-1:3001/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+        location /api/subscription {
+            proxy_pass http://sub-service-sub-service-1:3003/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+        location /api {
+            proxy_pass http://api-gateway-api-gateway-1:2001/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+        location / {
+            proxy_pass http://next-frontend-next-frontend-1:3000/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+}
+events { }
+
+
+Deploy infrastructure:
+docker-compose up -d
+
+
+Verify services:
+docker ps -a | grep -E 'nginx|postgres|redis'
+
+
+Expected: infrastructure-nginx-1, infrastructure-postgres-1, infrastructure-redis-1 running.
+
+
+
+
+🚀 11. Deploy Microservices
+
+Clone service repositories:
+cd /root/centstage
+git clone https://github.com/gulsherkooner/auth-service.git
+git clone https://github.com/gulsherkooner/post-service.git
+git clone https://github.com/gulsherkooner/sub-service.git
+git clone https://github.com/gulsherkooner/next-frontend.git
+git clone https://github.com/gulsherkooner/api-gateway.git
+
+
+Create docker-compose.yml for each service (example for post-service):
+cd /root/centstage/post-service
+nano docker-compose.yml
+
+version: '3.8'
+services:
+  post-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: post-service-post-service-1
+    env_file:
+      - .env
+    networks:
+      - cent-stage-network
+networks:
+  cent-stage-network:
+    external: true
+
+
+Create .env file:
+nano .env
+
+DATABASE_URL="postgresql://postgres:password@infrastructure-postgres-1:5432/my_app?schema=public"
+
+
+Repeat for other services (auth-service, sub-service, api-gateway, next-frontend), adjusting ports and configurations:
+
+auth-service: Port 3001, /api/auth.
+sub-service: Port 3003, /api/subscription.
+api-gateway: Port 2001, /api.
+next-frontend: Port 3000, /.
+
+
+Deploy services:
+cd /root/centstage/post-service
+docker-compose up -d
+cd /root/centstage/auth-service
+docker-compose up -d
+cd /root/centstage/sub-service
+docker-compose up -d
+cd /root/centstage/api-gateway
+docker-compose up -d
+cd /root/centstage/next-frontend
+docker-compose up -d
+
+
+
+
+🛡️ 12. Secure Services
+
+Restrict database access:
+
+Update Hetzner firewall to limit PostgreSQL (5432) and Redis (6379) to the server’s IP or a VPN.
+Example:# In Hetzner Console, update firewall rule
+PostgreSQL: Source: 135.181.192.55
+Redis: Source: 135.181.192.55
+
+
+
+
+Set strong passwords:
+
+Update POSTGRES_PASSWORD in infrastructure/docker-compose.yml.
+Update .env files for services.
+
+
+
+
+✅ 13. Test the Application
+
+Test APIs:
+curl http://135.181.192.55/api/post
+curl http://135.181.192.55/api/auth
+curl http://135.181.192.55/
+
+
+Check logs:
+docker logs infrastructure-nginx-1
+docker logs post-service-post-service-1
+
+
+
+
+🔄 14. Automate with Jenkins Pipelines
+
+Install Jenkins:
+sudo apt install -y openjdk-17-jre
+curl -fsSL https://pkg.jenkins.io/debian/jenkins.io-2023.key | sudo tee /usr/share/keyrings/jenkins-keyring.asc > /dev/null
+echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian binary/ | sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+sudo apt update
+sudo apt install -y jenkins
+sudo systemctl start jenkins
+sudo systemctl enable jenkins
+
+
+Access Jenkins:
+
+Open http://135.181.192.55:8080.
+Get initial password:sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+
+
+
+
+Create pipeline for infrastructure (example Jenkinsfile):
+cd /root/centstage/infrastructure
+nano Jenkinsfile
+
+pipeline {
+    agent any
+    environment {
+        HETZNER_IP = '135.181.192.55'
+    }
+    stages {
+        stage('Checkout SCM') {
+            steps {
+                git url: 'https://github.com/gulsherkooner/infrastructure.git', branch: 'main', credentialsId: 'github-token'
+            }
+        }
+        stage('Deploy Infrastructure') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'hetzner-ssh', keyFileVariable: 'SSH_KEY')]) {
+                    sh '''
+                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no root@${HETZNER_IP} <<'EOF'
+                        cd /root/centstage/infrastructure
+                        docker-compose -f docker-compose.yml up -d
+                        docker exec infrastructure-nginx-1 nginx -t
+                        docker exec infrastructure-nginx-1 nginx -s reload
+
+
+
+EOF                       ''                   }               }           }       }   }
+
+4. **Configure Jenkins pipeline**:
+- In Jenkins, create `infrastructure-deploy` pipeline with the above Jenkinsfile.
+- Add `github-token` and `hetzner-ssh` credentials.
+- Set up GitHub webhook.
+
+5. **Repeat for other services** with similar Jenkinsfiles.
 
 ---
 
-## 🔑 1. Generate SSH Key on Windows
+## 📝 Notes
 
-1.  **Open PowerShell.**
-
-2.  **Run the key generation command:**
-    ```powershell
-    ssh-keygen -t ed25519 -C "ubuntu-4gb-hel1-2"
-    ```
-    *   Press **Enter** to accept the default file location (e.g., `C:\Users\your_username\.ssh\id_ed25519`).
-    *   Press **Enter** twice to skip setting a passphrase (or enter a passphrase for extra security).
-
-3.  **Output Confirmation:**
-    You should see a confirmation message similar to:
-    ```
-    Your public key has been saved in C:\Users\uset\.ssh\id_ed25519.pub
-    ```
-
-4.  **View and Copy Your Public Key:**
-    ```powershell
-    Get-Content C:\Users\uset\.ssh\id_ed25519.pub
-    ```
-    Copy the entire output. It will look something like:
-    `ssh-ed25519 AAAAC3Nza... ubuntu-4gb-hel1-2`
+- **Security**: Restrict firewall ports and use strong passwords in production.
+- **Scaling**: Consider upgrading to a higher Hetzner plan (e.g., CPX31) for better performance.
+- **Monitoring**: Add logging/monitoring tools (e.g., Prometheus, Grafana) for production.
 
 ---
-
-## ☁️ 2. Add SSH Key to Hetzner Cloud
-
-1.  Navigate to the Hetzner Cloud Console.
-2.  Go to your **Project > Security > SSH Keys**.
-3.  Click **Add SSH Key**.
-4.  **Paste** the public key you copied in the previous section.
-5.  **Name** the key (e.g., `ubuntu-4gb-hel1-2`).
-6.  Click **Add SSH Key**.
-
----
-
-## 🧪 3. Test SSH Access from Windows
-
-1.  **Connect to your server via PowerShell:**
-    Replace `135.181.192.55` with your server's actual IP address.
-    ```powershell
-    ssh root@135.181.192.55
-    ```
-
-2.  If prompted to trust the host key, type `yes` and press **Enter**.
-
-3.  **Expected Output:** You should be logged into your Ubuntu server terminal:
-    ```
-    root@your-server-name:~#
-    ```
-    (For example: `root@cent-stage-server:~#`)
-
-4.  **Update and upgrade your server:**
-    ```bash
-    apt update && apt upgrade -y
-    ```
-
-5.  **Exit the SSH session:**
-    ```bash
-    exit
-    ```
-
----
-
-## 🔥 4. Set Up Firewall (Optional but Recommended)
-
-1.  In the Hetzner Cloud Console, go to **Your Project > Security > Firewalls**.
-2.  Click **Create Firewall**.
-3.  **Name:** `cent-stage-firewall` (or your preferred name).
-4.  **Add Rules:**
-    Create the following rules. Ensure you apply them for **both inbound and outbound traffic** as per your requirement.
-
-    | Service | Direction | Protocol | Port | Source IPs  |
-    | :------ | :-------- | :------- | :--- | :---------- |
-    | SSH     | Inbound   | TCP      | 22   | `0.0.0.0/0` |
-    | HTTP    | Inbound   | TCP      | 80   | `0.0.0.0/0` |
-    | HTTPS   | Inbound   | TCP      | 443  | `0.0.0.0/0` |
-    | SSH     | Outbound  | TCP      | 22   | `0.0.0.0/0` |
-    | HTTP    | Outbound  | TCP      | 80   | `0.0.0.0/0` |
-    | HTTPS   | Outbound  | TCP      | 443  | `0.0.0.0/0` |
-
-    > **Note:** Applying rules for *outbound* traffic with specific ports like this is less common. Typically, outbound traffic is allowed more broadly by default. Ensure this matches your security policy. If you only want to restrict *inbound*, only create inbound rules.
-
-5.  **Apply to Server(s):**
-    Under "Applied to", select your server (e.g., `ubuntu-4gb-hel1-2`).
-6.  Click **Create Firewall**.
-
-    This configuration allows SSH and standard web traffic while blocking other ports.
-
----
-
-## 🐳 5. Install Docker and Docker Compose on Hetzner Server
-
-1.  **Connect to your server again:**
-    ```powershell
-    ssh root@135.181.192.55
-    ```
-
-2.  **Update package list:**
-    ```bash
-    sudo apt update
-    ```
-
-3.  **Install prerequisites:**
-    ```bash
-    sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
-    ```
-
-4.  **Add Docker’s official GPG key:**
-    ```bash
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-    ```
-
-5.  **Set up the Docker repository:**
-    ```bash
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    ```
-
-6.  **Update package index again (with Docker repo):**
-    ```bash
-    sudo apt update
-    ```
-
-7.  **Install Docker Engine, CLI, and Containerd:**
-    ```bash
-    sudo apt install -y docker-ce docker-ce-cli containerd.io
-    ```
-
-8.  **Verify Docker installation:**
-    ```bash
-    sudo docker --version
-    ```
-    You should see the installed Docker version.
-
-9.  **Start and enable Docker service:**
-    ```bash
-    sudo systemctl start docker
-    sudo systemctl enable docker
-    ```
-
-10. **Check Docker service status:**
-    ```bash
-    sudo systemctl status docker
-    ```
-    Look for `active (running)`. Press `q` to exit the status view.
-
-11. **Install Docker Compose:**
-    (Check [Docker Compose releases page](https://github.com/docker/compose/releases) for the latest version and update `v2.26.1` if necessary.)
-    ```bash
-    DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/') # Dynamically gets latest
-    sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    ```
-
-12. **Make Docker Compose executable:**
-    ```bash
-    sudo chmod +x /usr/local/bin/docker-compose
-    ```
-
-13. **Verify Docker Compose installation:**
-    ```bash
-    docker-compose --version
-    ```
-    You should see the installed Docker Compose version.
-
----
-
-## 👤 6. Allow Non-Root Docker Usage (Optional but Recommended)
-
-1.  **Add your user to the `docker` group:**
-    Since you are logged in as `root`, `$USER` will be `root`. If you create a non-root user later, use that username instead of `$USER`.
-    ```bash
-    sudo usermod -aG docker $USER
-    ```
-    > **Security Note:** Adding `root` to the `docker` group doesn't change much as `root` already has privileges. This step is more impactful for non-root users. If you intend to run Docker as a non-root user, create that user first (e.g., `sudo adduser myuser`), then add `myuser` to the `docker` group (`sudo usermod -aG docker myuser`).
-
-2.  **Apply group changes:**
-    Log out and log back into the server for the group changes to take effect.
-    ```bash
-    exit
-    ```
-    Then reconnect:
-    ```powershell
-    ssh root@135.181.192.55
-    ```
-    (If you added a non-root user, log in as that user.)
-
-3.  **Test Docker without `sudo`:**
-    ```bash
-    docker ps
-    ```
-    This command should now run without requiring `sudo`.
-
----
-
-## ✅ 7. Test Docker with a Sample Container
-
-1.  **Run the `hello-world` container:**
-    ```bash
-    docker run --rm hello-world
-    ```
-
-2.  **Expected Output:**
-    You should see a message starting with:
-    ```
-    Hello from Docker!
-    This message shows that your installation appears to be working correctly.
-    ...
-    ```
-    This confirms Docker is installed and working correctly.
-
-3.  **Clean up (optional):**
-    The `--rm` flag automatically removed the container after it exited. You can remove the downloaded image if you wish:
-    ```bash
-    docker image rm hello-world
-    ```
-
----
-
-## (Open Firewall Ports for Services)
-
-Your microservices will use specific ports (e.g., 3002 for auth-service, 3004 for post-service, 3005 for subscription-service, 5432 for PostgreSQL, 6379 for Redis, 80/443 for Nginx
-
-1.  **Update the Hetzner firewall (set up in Step 1):** In Hetzner Cloud Console, go to Firewalls > cent-stage-firewall.
-2.  Add rules:
-   *    PostgreSQL: Protocol: TCP, Port: 5432, Source: 0.0.0.0/0 (restrict to server IP later for security).
-   *    Redis: Protocol: TCP, Port: 6379, Source: 0.0.0.0/0 (restrict later).
-   *    Custom Ports: Protocol: TCP, Port: 3000,30001,3002,3004,3005, Source: 0.0.0.0/0.
-3.    Apply to cent-stage-server.
-
-## 8.Create Deployment Directory:
-Create a directory for your application on the server:
-```
-mkdir -p /root/cent-stage
-cd /root/cent-stage
-```
-This will store Dockerfiles, Docker Compose, and configuration files.
-
-
-##create docker containers
-
-
 
