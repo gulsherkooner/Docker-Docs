@@ -1,12 +1,12 @@
 Docker Environment Setup on Hetzner Cloud
-This guide provides a step-by-step process to set up SSH access, configure a firewall, install Docker and Docker Compose, and deploy a microservices application on an Ubuntu 22.04 server hosted with Hetzner Cloud. The application includes auth-service, post-service, sub-service, next-frontend, api-gateway, and shared infrastructure (nginx, postgres, redis).
+This guide provides a step-by-step process to set up SSH access, configure a firewall, install Docker and Docker Compose, and deploy a microservices application on an Ubuntu 22.04 server hosted with Hetzner Cloud. The application includes auth-service, post-service, sub-service, dating-service, next-frontend, api-gateway, and shared infrastructure (nginx, postgres, redis).
 
 🔑 1. Generate SSH Key on Windows
 
 Open PowerShell on your Windows machine.
 
 Generate an SSH key pair:
-ssh-keygen -t ed25519 -C "ubuntu-4gb-hel1-2"
+ssh-keygen -t ed25519 -C "Ubuntu-4gb-hel1-2"
 
 
 Press Enter to accept the default file location (C:\Users\your_username\.ssh\id_ed25519).
@@ -287,6 +287,11 @@ http {
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
         }
+        location /api/dating {
+            proxy_pass http://dating-service-dating-service-1:3006/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
         location /api {
             proxy_pass http://api-gateway-api-gateway-1:2001/;
             proxy_set_header Host $host;
@@ -322,6 +327,7 @@ cd /root/centstage
 git clone https://github.com/gulsherkooner/auth-service.git
 git clone https://github.com/gulsherkooner/post-service.git
 git clone https://github.com/gulsherkooner/sub-service.git
+git clone https://github.com/gulsherkooner/dating-service.git
 git clone https://github.com/gulsherkooner/next-frontend.git
 git clone https://github.com/gulsherkooner/api-gateway.git
 
@@ -352,10 +358,11 @@ nano .env
 DATABASE_URL="postgresql://postgres:password@infrastructure-postgres-1:5432/my_app?schema=public"
 
 
-Repeat for other services (auth-service, sub-service, api-gateway, next-frontend), adjusting ports and configurations:
+Repeat for other services (auth-service, sub-service, dating-service, api-gateway, next-frontend), adjusting ports and configurations:
 
 auth-service: Port 3001, /api/auth.
 sub-service: Port 3003, /api/subscription.
+dating-service: Port 3006, /api/dating.
 api-gateway: Port 2001, /api.
 next-frontend: Port 3000, /.
 
@@ -366,6 +373,8 @@ docker-compose up -d
 cd /root/centstage/auth-service
 docker-compose up -d
 cd /root/centstage/sub-service
+docker-compose up -d
+cd /root/centstage/dating-service
 docker-compose up -d
 cd /root/centstage/api-gateway
 docker-compose up -d
@@ -400,12 +409,15 @@ Update .env files for services.
 Test APIs:
 curl http://135.181.192.55/api/post
 curl http://135.181.192.55/api/auth
+curl http://135.181.192.55/api/subscription
+curl http://135.181.192.55/api/dating
 curl http://135.181.192.55/
 
 
 Check logs:
 docker logs infrastructure-nginx-1
 docker logs post-service-post-service-1
+docker logs dating-service-dating-service-1
 
 
 
@@ -457,22 +469,114 @@ pipeline {
 
 
 
-EOF                       ''                   }               }           }       }   }
+EOF                       '''                   }               }           }       }   }
 
-4. **Configure Jenkins pipeline**:
-- In Jenkins, create `infrastructure-deploy` pipeline with the above Jenkinsfile.
-- Add `github-token` and `hetzner-ssh` credentials.
-- Set up GitHub webhook.
+4. **Create pipeline for `dating-service`** (example Jenkinsfile):
+```bash
+cd /root/centstage/dating-service
+nano Jenkinsfile
 
-5. **Repeat for other services** with similar Jenkinsfiles.
+pipeline {
+    agent any
+    environment {
+        HETZNER_IP = '135.181.192.55'
+        TAG        = "${env.GIT_COMMIT}"
+    }
+    stages {
+        stage('Checkout SCM') {
+            steps {
+                git url: 'https://github.com/gulsherkooner/dating-service.git',
+                    branch: 'main',
+                    credentialsId: 'github-token'
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'hetzner-ssh', keyFileVariable: 'SSH_KEY')]) {
+                    sh '''
+                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@${HETZNER_IP} <<'EOF'
+                        mkdir -p /root/centstage/dating-service
+                        cd /root/centstage/dating-service
+                        if [ ! -d .git ]; then
+                            git clone https://github.com/gulsherkooner/dating-service.git .
+                        else
+                            git pull origin main
+                        fi
+                        docker build -t dating-service:${TAG} .
+                        docker save -o /root/dating-service-${TAG}.tar dating-service:${TAG}
+EOF
+                    '''
+                }
+            }
+        }
+        stage('Deploy Service') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'hetzner-ssh', keyFileVariable: 'SSH_KEY')]) {
+                    sh '''
+                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@${HETZNER_IP} <<'EOF'
+                        cd /root/centstage/infrastructure
+                        docker-compose -f docker-compose.yml up -d
+                        cd /root/centstage/dating-service
+                        docker load -i /root/dating-service-${TAG}.tar
+                        docker-compose -f docker-compose.yml up -d
+                        rm /root/dating-service-${TAG}.tar
+                        docker exec infrastructure-nginx-1 nginx -s reload
+EOF
+                    '''
+                }
+            }
+        }
+        stage('Verify Service') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'hetzner-ssh', keyFileVariable: 'SSH_KEY')]) {
+                    sh '''
+                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@${HETZNER_IP} <<'EOF'
+                        if ! docker ps | grep -q dating-service-dating-service-1; then
+                            echo "Dating service container not running"
+                            exit 1
+                        fi
+EOF
+                    '''
+                }
+            }
+        }
+    }
+    post {
+        success {
+            echo 'Dating microservice deployed successfully'
+        }
+        failure {
+            echo 'Dating microservice deployment failed'
+            withCredentials([sshUserPrivateKey(credentialsId: 'hetzner-ssh', keyFileVariable: 'SSH_KEY')]) {
+                sh '''
+                    ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@${HETZNER_IP} <<'EOF'
+                    cd /root/centstage/dating-service
+                    docker-compose -f docker-compose.yml down
+                    rm -f /root/dating-service-${TAG}.tar
+EOF
+                '''
+            }
+            error 'Rolled back dating microservice deployment'
+        }
+    }
+}
 
----
 
-## 📝 Notes
+Configure Jenkins pipeline:
 
-- **Security**: Restrict firewall ports and use strong passwords in production.
-- **Scaling**: Consider upgrading to a higher Hetzner plan (e.g., CPX31) for better performance.
-- **Monitoring**: Add logging/monitoring tools (e.g., Prometheus, Grafana) for production.
+In Jenkins, create infrastructure-deploy pipeline with the above Jenkinsfile.
+Create dating-service-deploy pipeline with the dating-service Jenkinsfile.
+Add github-token and hetzner-ssh credentials.
+Set up GitHub webhook for each repository.
 
----
+
+Repeat for other services (auth-service, post-service, sub-service, api-gateway, next-frontend) with similar Jenkinsfiles.
+
+
+
+📝 Notes
+
+Security: Restrict firewall ports and use strong passwords in production.
+Scaling: Consider upgrading to a higher Hetzner plan (e.g., CPX31) for better performance.
+Monitoring: Add logging/monitoring tools (e.g., Prometheus, Grafana) for production.
 
