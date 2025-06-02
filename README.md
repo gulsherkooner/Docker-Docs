@@ -1,12 +1,14 @@
-Docker Environment Setup on Hetzner Cloud
-This guide provides a step-by-step process to set up SSH access, configure a firewall, install Docker and Docker Compose, and deploy a microservices application on an Ubuntu 22.04 server hosted with Hetzner Cloud. The application includes auth-service, post-service, sub-service, dating-service, next-frontend, api-gateway, and shared infrastructure (nginx, postgres, redis).
+# 🚀 Docker Microservices Deployment on Hetzner Cloud
 
-🔑 1. Generate SSH Key on Windows
+This guide walks you through setting up SSH, firewall, Docker, Docker Compose, and deploying a microservices stack (auth-service, post-service, sub-service, dating-service, next-frontend, api-gateway, nginx, postgres, redis) on Ubuntu 22.04 at Hetzner Cloud.
 
-Open PowerShell on your Windows machine.
+---
 
-Generate an SSH key pair:
+## 🔑 1. Generate SSH Key on Windows
+
+```powershell
 ssh-keygen -t ed25519 -C "Ubuntu-4gb-hel1-2"
+```
 
 
 Press Enter to accept the default file location (C:\Users\your_username\.ssh\id_ed25519).
@@ -22,7 +24,7 @@ Copy the output (e.g., ssh-ed25519 AAAAC3Nza... ubuntu-4gb-hel1-2).
 
 
 
-☁️ 2. Add SSH Key to Hetzner Cloud
+## ☁️ 2. Add SSH Key to Hetzner Cloud
 
 Log in to the Hetzner Cloud Console.
 Navigate to Project > Security > SSH Keys.
@@ -32,7 +34,7 @@ Name the key (e.g., ubuntu-4gb-hel1-2).
 Click Add SSH Key.
 
 
-🧪 3. Test SSH Access from Windows
+## 🧪 3. Test SSH Access from Windows
 
 Connect to the server:Replace 135.181.192.55 with your server’s IP.
 ssh root@135.181.192.55
@@ -55,7 +57,7 @@ exit
 
 
 
-🔥 4. Configure Firewall
+## 🔥 4. Configure Firewall
 
 In the Hetzner Cloud Console, go to Project > Security > Firewalls.
 Click Create Firewall.
@@ -63,48 +65,14 @@ Set Name: cent-stage-firewall.
 Add Inbound Rules:
 
 
-Service
-Protocol
-Port
-Source IPs
-
-
-
-SSH
-TCP
-22
-0.0.0.0/0
-
-
-HTTP
-TCP
-80
-0.0.0.0/0
-
-
-HTTPS
-TCP
-443
-0.0.0.0/0
-
-
-Jenkins
-TCP
-8080
-0.0.0.0/0
-
-
-PostgreSQL
-TCP
-5432
-0.0.0.0/0*
-
-
-Redis
-TCP
-6379
-0.0.0.0/0*
-
+| Service      | Protocol | Port | Source IPs |
+|--------------|----------|------|------------|
+| SSH          | TCP      | 22   | 0.0.0.0/0  |
+| HTTP         | TCP      | 80   | 0.0.0.0/0  |
+| HTTPS        | TCP      | 443  | 0.0.0.0/0  |
+| Jenkins      | TCP      | 8080 | 0.0.0.0/0  |
+| PostgreSQL   | TCP      | 5432 | 0.0.0.0/0* |
+| Redis        | TCP      | 6379 | 0.0.0.0/0* |
 
 
 *Restrict PostgreSQL and Redis to your server’s IP or VPN for production.
@@ -121,7 +89,55 @@ sudo ufw enable
 
 
 
-🐳 5. Install Docker and Docker Compose
+## 🌐 4.1. Set Up Domain Name and DNS
+
+1. **Purchase a Domain Name**
+   - Buy a domain from a provider like Namecheap, GoDaddy, Google Domains, etc.
+
+2. **Update DNS Records**
+   - Go to your domain registrar’s dashboard.
+   - Find the DNS management section.
+   - Add an **A record** pointing your domain (e.g., `cent-stage.yourdomain.com`) to your Hetzner server’s public IP (e.g., `135.181.192.55`).
+
+   | Type | Name (Host) | Value (IP)         | TTL   |
+   |------|-------------|--------------------|-------|
+   | A    | @           | 135.181.192.55     | 1 min |
+   | A    | www         | 135.181.192.55     | 1 min |
+
+   - For subdomains (e.g., `api.cent-stage.yourdomain.com`), add additional A records as needed.
+
+3. **Wait for DNS Propagation**
+   - It may take a few minutes to a few hours for DNS changes to propagate.
+
+4. **Update Nginx Configuration**
+   - In your `nginx.conf`, set your `server_name` to your domain:
+     ```nginx
+     server {
+         listen 80;
+         server_name cent-stage.yourdomain.com www.cent-stage.yourdomain.com;
+         ...
+     }
+     ```
+   - For HTTPS, ensure your SSL certificates match your domain.
+
+5. **(Optional) Use Let’s Encrypt for SSL**
+   - Install Certbot:
+     ```bash
+     sudo apt install certbot python3-certbot-nginx
+     ```
+   - Obtain a certificate:
+     ```bash
+     sudo certbot --nginx -d cent-stage.yourdomain.com -d www.cent-stage.yourdomain.com
+     ```
+   - Certbot will update your Nginx config and reload Nginx.
+
+6. **Test Your Domain**
+   - Visit `http://cent-stage.yourdomain.com` and `https://cent-stage.yourdomain.com` in your browser.
+   - Use `ping cent-stage.yourdomain.com` or `nslookup cent-stage.yourdomain.com` to verify DNS.
+
+---
+
+## 🐳 5. Install Docker and Docker Compose
 
 Connect to the server:
 ssh root@135.181.192.55
@@ -172,7 +188,7 @@ docker-compose --version
 
 
 
-👤 6. Enable Non-Root Docker Access (Optional)
+## 👤 6. Enable Non-Root Docker Access (Optional)
 
 Add user to Docker group:
 sudo usermod -aG docker $USER
@@ -189,7 +205,7 @@ docker ps
 
 
 
-✅ 7. Test Docker Installation
+## ✅ 7. Test Docker Installation
 
 Run a test container:
 docker run --rm hello-world
@@ -204,7 +220,7 @@ docker image rm hello-world
 
 
 
-📁 8. Set Up Deployment Directory
+## 📁 8. Set Up Deployment Directory
 
 Create directory:mkdir -p /root/centstage
 cd /root/centstage
@@ -212,14 +228,14 @@ cd /root/centstage
 
 
 
-🛠️ 9. Create Docker Network
+## 🛠️ 9. Create Docker Network
 
 Create a shared network:docker network create cent-stage-network
 
 
 
 
-🗄️ 10. Deploy Infrastructure Services
+## 🗄️ 10. Deploy Infrastructure Services
 
 Clone infrastructure repository:
 cd /root/centstage
@@ -320,7 +336,7 @@ Expected: infrastructure-nginx-1, infrastructure-postgres-1, infrastructure-redi
 
 
 
-🚀 11. Deploy Microservices
+## 🚀 11. Deploy Microservices
 
 Clone service repositories:
 cd /root/centstage
@@ -384,7 +400,7 @@ docker-compose up -d
 
 
 
-🛡️ 12. Secure Services
+## 🛡️ 12. Secure Services
 
 Restrict database access:
 
@@ -404,7 +420,7 @@ Update .env files for services.
 
 
 
-✅ 13. Test the Application
+## ✅ 13. Test the Application
 
 Test APIs:
 curl http://135.181.192.55/api/post
@@ -422,7 +438,7 @@ docker logs dating-service-dating-service-1
 
 
 
-🔄 14. Automate with Jenkins Pipelines
+## 🔄 14. Automate with Jenkins Pipelines
 
 Install Jenkins:
 sudo apt install -y openjdk-17-jre
@@ -574,7 +590,7 @@ Repeat for other services (auth-service, post-service, sub-service, api-gateway,
 
 
 
-📝 Notes
+## 📝 Notes
 
 Security: Restrict firewall ports and use strong passwords in production.
 Scaling: Consider upgrading to a higher Hetzner plan (e.g., CPX31) for better performance.
